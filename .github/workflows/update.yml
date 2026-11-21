@@ -1,0 +1,59 @@
+name: Update niche tracker
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"   # every 3 hours
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: niche-tracker
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Load saved data
+        run: |
+          git fetch origin data --depth=1 2>/dev/null && git show origin/data:tracker_data.json > tracker_data.json || echo "No saved data yet, starting fresh"
+
+      - name: Run tracker
+        run: python roblox_niche_tracker.py
+
+      - name: Save data and publish report
+        run: |
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          publish () {  # $1 = branch, rest = files. Keeps just one commit so the repo stays small.
+            branch=$1; shift
+            rm -rf /tmp/out && mkdir /tmp/out && cp "$@" /tmp/out/ && cd /tmp/out
+            git init -q -b "$branch"
+            git config user.name "niche-bot"
+            git config user.email "niche-bot@users.noreply.github.com"
+            git add -A && git commit -qm "Update $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push -qf "$REMOTE" "$branch"
+            cd - >/dev/null
+          }
+          cp report.html index.html && touch .nojekyll
+          publish data tracker_data.json
+          publish gh-pages index.html .nojekyll
+
+      - name: Daily keep-alive (stops GitHub pausing the schedule)
+        run: |
+          if [ "$(date -u +%H)" -lt 3 ]; then
+            date -u +'%Y-%m-%d %H:%M UTC' > LAST_RUN.txt
+            git config user.name "niche-bot"
+            git config user.email "niche-bot@users.noreply.github.com"
+            git add LAST_RUN.txt && git commit -qm "Daily check-in" && git push -q || true
+          fi
