@@ -42,7 +42,7 @@ import uuid
 # ---------------------------------------------------------------------------
 MIN_CCU = 5000          # only count games with at least this many players
 TRACK_MIN = 2000        # also keep watching games above this, so risers get caught
-UPDATE_HOURS = 3        # how often player counts are updated
+UPDATE_HOURS = 1        # how often player counts are updated
 SCAN_HOURS = 24         # how often a full scan for new games happens
 NEW_GAME_DAYS = 90      # games made within this many days get a NEW badge
 KEEP_HISTORY_DAYS = 14

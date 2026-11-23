@@ -2,7 +2,7 @@ name: Update niche tracker
 
 on:
   schedule:
-    - cron: "17 */3 * * *"   # every 3 hours
+    - cron: "17 * * * *"     # every hour
   workflow_dispatch:          # lets you run it by hand from the Actions tab
 
 permissions:
@@ -51,7 +51,7 @@ jobs:
 
       - name: Daily keep-alive (stops GitHub pausing the schedule)
         run: |
-          if [ "$(date -u +%H)" -lt 3 ]; then
+          if [ "$(date -u +%H)" = "00" ]; then
             date -u +'%Y-%m-%d %H:%M UTC' > LAST_RUN.txt
             git config user.name "niche-bot"
             git config user.email "niche-bot@users.noreply.github.com"
