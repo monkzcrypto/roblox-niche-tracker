@@ -664,6 +664,59 @@ FEATURES = {
 }
 FEATURE_RX = {k: re.compile(v, re.I) for k, v in FEATURES.items()}
 
+# For the auto-written game description
+HOOKS = {
+    "Fishing": "Cast your line and reel in {x}-themed catches, from common all the way to SECRET!",
+    "Tycoon": "Build the ultimate {x} empire and watch the cash roll in!",
+    "Pets": "Hatch, collect and level up adorable {x} pets!",
+    "Steal a ___": "Collect the rarest {x}s, guard your base, and steal from everyone else!",
+    "Grow a / Garden / Farm": "Plant, grow and harvest {x}s, and hunt for rare mutations!",
+    "Simulator": "Collect, upgrade and become the best {x} player on the server!",
+    "Tower Defense": "Summon {x} units, upgrade them and hold off every wave!",
+    "Obby / Parkour": "Jump your way through {x}-themed stages and reach the top!",
+    "RNG / Gacha / Luck": "Roll for {x} auras and chase one-in-a-million rarities!",
+    "Battlegrounds / Fighting": "Pick your {x} fighter and take over the arena!",
+    "Horror": "Survive the {x}... if you can.",
+    "Survival": "Team up with friends and survive the {x}!",
+    "Anime": "Unlock {x} powers and become a legend!",
+    "Mining / Digging": "Dig deeper, find rare {x}s and upgrade your gear!",
+    "Cooking / Restaurant / Shop": "Run the best {x} shop in town and grow your business!",
+    "Racing / Driving / Cars": "Race, earn and build the fastest {x} collection!",
+    "Clicker / Idle / Merge": "Merge, upgrade and grow your {x} collection, even while you're away!",
+}
+FEATURE_LINES = {
+    "Events & limited items": "🎉 Weekly events with limited-time items", "Play with friends": "👥 Play with your friends",
+    "Collect & sell loop": "💰 Collect, sell and upgrade", "Rarities & mutations": "🌈 Rare, mythic and SECRET variants",
+    "Codes for free rewards": "🎁 Codes for free rewards", "Group join bonus": "⭐ Join the group for a bonus",
+    "PvP fighting": "⚔️ PvP battles", "Pets / companions": "🐾 Pets that boost your stats", "Eggs & hatching": "🥚 Eggs to hatch",
+    "Trading": "🔁 Trade with other players", "Rebirth / prestige": "🔄 Rebirth for bigger multipliers",
+    "Base / plot building": "🏠 Build and grow your own base", "Stealing / raiding": "🦹 Steal from other players",
+    "Luck boosts": "🍀 Luck boosts", "Upgrades": "⬆️ Tons of upgrades", "Ragdoll / physics fun": "🤸 Ragdoll physics",
+    "Quests & missions": "📜 Quests and missions", "Leaderboards": "🏆 Global leaderboards",
+    "Daily rewards / gifts": "📅 Daily rewards", "Offline / idle earnings": "💤 Earn while you're offline",
+    "Gamepasses / VIP / 2x": "💎 VIP and 2x boosts", "Frequent updates": "🆕 New updates all the time",
+}
+THEME_EMOJI = {"fish": "🐟", "anime": "🌸", "pet": "🐶", "garden": "🌱", "brainrot": "🧠", "monster": "👹", "car": "🏎️",
+               "gem": "💎", "food": "🍔", "soccer": "⚽", "egg": "🥚", "animal": "🦁", "river": "🌊", "clean": "🧽",
+               "heist": "💰", "fashion": "👗", "dragon": "🐉", "ninja": "🥷", "zombie": "🧟", "candy": "🍬",
+               "space": "🚀", "ocean": "🌊", "sea": "🌊", "cat": "🐱", "dog": "🐶", "bee": "🐝", "plant": "🌿"}
+BASE_EMOJI = {"Fishing": "🎣", "Tycoon": "🏭", "Pets": "🐾", "Steal a ___": "🦹", "Grow a / Garden / Farm": "🌱",
+              "Simulator": "⚡", "Tower Defense": "🏰", "Obby / Parkour": "🧗", "RNG / Gacha / Luck": "🎲",
+              "Battlegrounds / Fighting": "👊", "Horror": "👻", "Survival": "🔥", "Anime": "⚔️",
+              "Mining / Digging": "⛏️", "Cooking / Restaurant / Shop": "🍳", "Racing / Driving / Cars": "🏁",
+              "Clicker / Idle / Merge": "👆", "Sports": "🏆", "Shooter / FPS": "🎯"}
+
+
+def write_description(title, base, noun, feats, e1, e2):
+    hook = HOOKS.get(base, "A brand-new {x} adventure!").replace("{x}", noun.lower())
+    lines = [f"{e1} {title.upper()} {e2}", "", hook, "", "✨ FEATURES"]
+    picked = [FEATURE_LINES[f["name"]] for f in feats if f["name"] in FEATURE_LINES][:6]
+    if not picked:
+        picked = ["⬆️ Tons of upgrades", "👥 Play with your friends", "🆕 New updates all the time"]
+    lines += picked
+    lines += ["", "👍 Like and ⭐ favorite so you don't miss the next update!"]
+    return "\n".join(lines)
+
 
 def singular(w):
     w = w.strip()
@@ -743,7 +796,12 @@ def make_ideas(recs, groups, big):
         target = (f"New {b['label']} games (made in the last {NEW_GAME_DAYS} days) are reaching about "
                   f"{new_ccus[len(new_ccus) // 2]:,} players. A typical 5k+ game here has about {median:,}."
                   if new_ccus else f"A typical 5k+ game in this niche has about {median:,} players.")
+        e1 = next((v for k, v in THEME_EMOJI.items() if k in noun.lower()), "✨")
+        e2 = BASE_EMOJI.get(b["label"], "🎮")
+        hue = sum(map(ord, title)) * 37 % 360
         ideas.append({
+            "emoji": [e1, e2], "hue": hue,
+            "desc": write_description(title, b["label"], noun, feats, e1, e2),
             "title": title,
             "pitch": f"A {b['label'].split(' /')[0].lower().replace('___', 'something')} game with {'an' if noun[0] in 'AEIOU' else 'a'} {noun.lower()} theme. "
                      f"It takes what's working in one of the strongest niches and adds a theme that's pulling players right now.",
@@ -896,6 +954,15 @@ tr.more td{background:#0f121a;padding:0}
 .study{font-size:12.5px;color:var(--dim);margin-top:10px}.study a{color:var(--text)}
 .idea{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:16px}
 .idea.top{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.art{display:flex;gap:14px;margin:6px 0 16px;flex-wrap:wrap;align-items:flex-start}
+.art canvas{border-radius:12px;border:1px solid var(--line);display:block;background:#000}
+.art .thumb{width:100%;aspect-ratio:16/9}
+.artcol.wide{width:560px;max-width:100%}
+.art .icon{width:180px;height:180px}
+.artcol{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.small{background:#232836;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer}
+.small:hover{border-color:var(--accent)}
+pre.gdesc{white-space:pre-wrap;font:13px/1.5 -apple-system,Helvetica,Arial,sans-serif;margin:0 0 8px;background:#0f121a;border-radius:8px;padding:10px 12px;max-height:260px;overflow:auto}
 .idea h3{margin:4px 0 6px;font-size:26px;letter-spacing:-.4px}
 .idea .tag{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--gold)}
 .idea .pitch{color:#c3c8d4;font-size:14px;margin:0 0 14px}
@@ -1057,7 +1124,15 @@ function renderIdeas(){
   ${ideas.map((d,i)=>`<div class="idea ${i==0?'top':''}">
     <div class="tag">${i==0?'⭐ Top idea':'Idea '+(i+1)} · ${esc(d.base)} + ${esc(d.theme)} theme</div>
     <h3>${esc(d.title)}</h3><p class="pitch">${esc(d.pitch)}</p>
+    <div class="art">
+      <div class="artcol wide"><canvas class="thumb" width="1280" height="720" data-i="${i}" data-k="thumb"></canvas>
+        <button class="small" data-dl="${i}" data-k="thumb">⬇ Download thumbnail</button></div>
+      <div class="artcol"><canvas class="icon" width="512" height="512" data-i="${i}" data-k="icon"></canvas>
+        <button class="small" data-dl="${i}" data-k="icon">⬇ Download icon</button></div>
+    </div>
     <div class="igrid">
+      <div class="box" style="grid-column:1/-1"><h4>Game description, ready to paste</h4><pre class="gdesc">${esc(d.desc)}</pre>
+        <button class="small" data-copy="${i}">📋 Copy description</button></div>
       <div class="box"><h4>Why this game</h4><ul class="why" style="margin:0">${d.why.map(w=>`<li>✅ ${esc(w)}</li>`).join('')}${d.warn.map(w=>`<li>⚠️ ${esc(w)}</li>`).join('')}</ul></div>
       <div class="box"><h4>How it plays</h4><p><b>Core loop:</b> ${esc(d.loop)}</p><p><b>Your twist:</b> ${esc(d.twist)}</p><p><b>What to expect:</b> ${esc(d.target)}</p></div>
       <div class="box"><h4>Must-have features <span style="text-transform:none;letter-spacing:0">(% of top games' players that have it)</span></h4>
@@ -1065,6 +1140,49 @@ function renderIdeas(){
       <div class="box"><h4>Study these games</h4><div class="studies">${d.study.filter(id=>D.games[id]).map(id=>{const g=D.games[id];
         return `<div class="study-g">${g.icon?`<img src="${g.icon}">`:'<img>'}<div><a href="${g.url}" target="_blank">${esc(g.name)}</a><div class="flatc">${fmt(g.ccu)} CCU${g.isNew?' · new':''}</div></div></div>`}).join('')}</div></div>
     </div></div>`).join('')||'<div class="empty">Not enough data yet. Check back after the next update.</div>'}`;
+  el.querySelectorAll('canvas[data-i]').forEach(c=>drawArt(c,ideas[c.dataset.i],c.dataset.k=='icon'));
+  el.querySelectorAll('[data-dl]').forEach(b=>b.onclick=()=>{
+    const c=el.querySelector(`canvas[data-i="${b.dataset.dl}"][data-k="${b.dataset.k}"]`);
+    const a=document.createElement('a');a.download=ideas[b.dataset.dl].title.replace(/[^a-z0-9]+/gi,'_')+'_'+b.dataset.k+'.png';
+    a.href=c.toDataURL('image/png');a.click()});
+  el.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{
+    navigator.clipboard.writeText(ideas[b.dataset.copy].desc).then(()=>{b.textContent='✅ Copied!';setTimeout(()=>b.textContent='📋 Copy description',1500)})});
+}
+
+function drawArt(c,d,square){
+  const x=c.getContext('2d'),W=c.width,H=c.height,h=d.hue;
+  let seed=[...d.title].reduce((a,ch)=>a*31+ch.charCodeAt(0)>>>0,7);
+  const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+  const g=x.createRadialGradient(W*.55,H*.45,10,W*.5,H*.5,Math.max(W,H)*.8);
+  g.addColorStop(0,`hsl(${h},90%,62%)`);g.addColorStop(.55,`hsl(${(h+25)%360},80%,40%)`);g.addColorStop(1,`hsl(${(h+50)%360},75%,16%)`);
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  // sunburst
+  x.save();x.translate(W*.6,H*.45);x.fillStyle='rgba(255,255,255,.07)';
+  for(let k=0;k<18;k++){x.rotate(Math.PI*2/18);x.beginPath();x.moveTo(0,0);x.lineTo(W,-W*.09);x.lineTo(W,W*.09);x.closePath();x.fill()}
+  x.restore();
+  const emo=s=>`${s}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  x.textAlign='center';x.textBaseline='middle';
+  // sparkles
+  for(let k=0;k<(square?5:9);k++){x.globalAlpha=.55+rnd()*.4;x.font=emo(H*(.05+rnd()*.06));x.fillText('✨',rnd()*W,rnd()*H)}
+  x.globalAlpha=1;x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=H*.04;x.shadowOffsetY=H*.015;
+  if(square){x.font=emo(H*.5);x.fillText(d.emoji[0],W*.5,H*.42);x.font=emo(H*.26);x.fillText(d.emoji[1],W*.78,H*.72)}
+  else{x.font=emo(H*.48);x.fillText(d.emoji[0],W*.74,H*.5);x.font=emo(H*.24);x.fillText(d.emoji[1],W*.9,H*.78)}
+  x.shadowBlur=0;x.shadowOffsetY=0;
+  // title
+  const words=d.title.toUpperCase().split(' '),maxW=square?W*.9:W*.6;
+  let lines=[],size=square?H*.16:H*.2;
+  const fit=()=>{x.font=`900 ${size}px "Arial Black","Helvetica Neue",Impact,sans-serif`;lines=[];let cur='';
+    for(const w of words){const t=cur?cur+' '+w:w;if(x.measureText(t).width>maxW&&cur){lines.push(cur);cur=w}else cur=t}lines.push(cur)};
+  fit();while((lines.length>(square?2:3)||lines.some(l=>x.measureText(l).width>maxW))&&size>14){size*=.92;fit()}
+  const cx=square?W*.5:W*.34,lh=size*1.05,y0=square?H*.8-(lines.length-1)*lh/2:H*.5-(lines.length-1)*lh/2;
+  lines.forEach((l,k)=>{const y=y0+k*lh;
+    x.lineJoin='round';x.lineWidth=size*.22;x.strokeStyle='#111';x.strokeText(l,cx,y);
+    const tg=x.createLinearGradient(0,y-size/2,0,y+size/2);tg.addColorStop(0,'#fff9d6');tg.addColorStop(.5,'#ffd23f');tg.addColorStop(1,'#ff9f1c');
+    x.fillStyle=tg;x.fillText(l,cx,y)});
+  // NEW badge
+  if(!square){x.save();x.translate(W*.1,H*.12);x.rotate(-.18);x.fillStyle='#ff2e4d';const bw=W*.13,bh=H*.1;
+    x.beginPath();x.roundRect(-bw/2,-bh/2,bw,bh,bh*.3);x.fill();x.lineWidth=H*.008;x.strokeStyle='#fff';x.stroke();
+    x.fillStyle='#fff';x.font=`900 ${bh*.6}px "Arial Black",Impact,sans-serif`;x.fillText('NEW!',0,bh*.04);x.restore()}
 }
 
 function renderRecs(q){
