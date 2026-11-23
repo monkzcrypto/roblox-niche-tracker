@@ -498,6 +498,7 @@ def build_groups(state):
     groups = [make("niche", n, n, m) for n, m in niche_members.items()]
     groups += [make("name", p, f'"{p}"', m) for p, m in names.items()]
     recs = recommend(groups, span7)
+    ideas = make_ideas(recs, groups, big)
 
     # game table data
     gdata = {}
@@ -513,7 +514,7 @@ def build_groups(state):
             "banner": g.get("banner", ""), "desc": g.get("desc", ""),
             "creator": g.get("creator", ""), "creatorUrl": creator_url(g),
         }
-    return groups, gdata, recs, span7
+    return groups, gdata, recs, span7, ideas
 
 
 def recommend(groups, span_hours):
@@ -586,6 +587,176 @@ def recommend(groups, span_hours):
     return out[:20]
 
 
+# ---------------------------------------------------------------------------
+# Game ideas
+# ---------------------------------------------------------------------------
+# How each niche's game usually plays
+LOOPS = {
+    "Steal a ___": "Players own a base that earns money from what's in it, sneak into other bases to steal the best items, and lock and defend their own.",
+    "Grow a / Garden / Farm": "Plant, wait, harvest and sell, then buy better seeds. Rare mutations make some harvests worth far more.",
+    "Tycoon": "Buy machines and upgrades that earn money on their own, expand the base, then rebirth for bigger multipliers.",
+    "Simulator": "Collect or click to earn, upgrade tools and pets to earn faster, unlock new areas, then rebirth.",
+    "Tower Defense": "Place and upgrade units to stop waves of enemies, and summon new units from banners between matches.",
+    "Obby / Parkour": "Beat harder and harder stages, with checkpoints, skips and cosmetics to unlock.",
+    "RNG / Gacha / Luck": "Roll for random items with rarity tiers, chase ultra-rares, and use luck boosts and collections.",
+    "Anime": "Anime-style characters and powers: fight, level up and unlock new abilities.",
+    "Battlegrounds / Fighting": "Pick a character moveset and fight others in an arena, with combos, ragdolls and ranks.",
+    "Shooter / FPS": "Fast shooting rounds with weapons and skins to unlock.",
+    "Horror": "Survive or escape a monster with friends in short, tense rounds.",
+    "Survival": "Gather, build and survive nights or waves together.",
+    "Roleplay / Life / City": "An open world where players pick jobs, houses and vehicles and roleplay together.",
+    "Brainrot / Meme": "Meme characters as collectibles to collect, upgrade and show off.",
+    "Fishing": "Cast, catch fish of different rarities, sell them, upgrade rods and bait, and explore new waters.",
+    "Pets": "Hatch eggs for pets that boost your earnings, then collect, trade and upgrade them.",
+    "Clicker / Idle / Merge": "Tap or wait to earn, buy upgrades and earn while offline.",
+    "Racing / Driving / Cars": "Drive and race to earn money, then buy and customize cars.",
+    "Cops & Robbers / Heist": "Criminals rob places and cops try to stop them.",
+    "Sports": "Matches with special skills and ranked play.",
+    "Party / Minigames / Hide": "Short rounds of different minigames with friends.",
+    "Mining / Digging": "Dig deeper for better ores, sell them and upgrade your tools.",
+    "Dress Up / Fashion": "Style outfits to a theme and get voted on.",
+    "Hangout / Social": "Chill places to meet and talk with people.",
+    "Escape / Story": "Story chapters with puzzles and chases.",
+    "Cooking / Restaurant / Shop": "Run a shop: cook and serve customers, earn money and expand.",
+}
+# How to name a game in each niche ({X} = the theme)
+TITLES = {
+    "Steal a ___": "Steal a {X}", "Grow a / Garden / Farm": "Grow a {X}", "Tycoon": "{X} Tycoon",
+    "Simulator": "{X} Simulator", "Tower Defense": "{X} Tower Defense", "Obby / Parkour": "{X} Obby",
+    "RNG / Gacha / Luck": "{X} RNG", "Battlegrounds / Fighting": "{X} Battlegrounds",
+    "Shooter / FPS": "{X} Rivals", "Horror": "Escape the {X}", "Survival": "Survive the {X}",
+    "Fishing": "{X} Fishing", "Pets": "{X} Pets", "Clicker / Idle / Merge": "Merge {X}",
+    "Mining / Digging": "Dig for {X}", "Cooking / Restaurant / Shop": "{X} Shop",
+    "Racing / Driving / Cars": "{X} Racing", "Party / Minigames / Hide": "{X} Party",
+    "Anime": "{X} Anime Legends", "Brainrot / Meme": "{X} Brainrot", "Sports": "{X} Soccer",
+}
+# Theme word to use when a niche is the "twist"
+NICHE_NOUN = {
+    "Anime": "Anime", "Horror": "Monster", "Fishing": "Fish", "Pets": "Pet", "Brainrot / Meme": "Brainrot",
+    "Sports": "Soccer", "Racing / Driving / Cars": "Car", "Mining / Digging": "Gem", "Grow a / Garden / Farm": "Garden",
+    "Cooking / Restaurant / Shop": "Food", "Cops & Robbers / Heist": "Heist", "Dress Up / Fashion": "Fashion",
+}
+GENERIC = set("""world simulator tycoon realistic tower legends legend ultimate battle battlegrounds obby rng
+defense defence game games arena city life story hub mode online classic super mega best pro plus edition""".split())
+FEATURES = {
+    "Pets / companions": r"\bpets?\b|companion",
+    "Eggs & hatching": r"\beggs?\b|hatch",
+    "Trading": r"\btrad(e|es|ing)\b",
+    "Rebirth / prestige": r"rebirth|prestige|ascen",
+    "Codes for free rewards": r"\bcodes?\b",
+    "Base / plot building": r"\bbase\b|\bplots?\b|\bbuild",
+    "Stealing / raiding": r"\bsteal|\brob\b|\braid",
+    "Collect & sell loop": r"\bsell|\bcollect",
+    "Rarities & mutations": r"rare|rarity|mutation|secret|mythic|legendary",
+    "Luck boosts": r"\bluck",
+    "Events & limited items": r"\bevents?\b|limited|admin abuse|weekly|season",
+    "Upgrades": r"upgrade",
+    "Ragdoll / physics fun": r"ragdoll|physics|fling|\bthrow",
+    "Play with friends": r"friends|co-?op|together|\bsquad|\bteam",
+    "PvP fighting": r"\bpvp\b|\bfight|\bbattle|\bkill",
+    "Quests & missions": r"quest|mission",
+    "Leaderboards": r"leaderboard|top players|\branks?\b|ranked",
+    "Daily rewards / gifts": r"daily|free gift|login reward|\bspins?\b",
+    "Offline / idle earnings": r"offline|\bidle\b|\bafk\b",
+    "Group join bonus": r"join (the |our )?group|group (perks|reward|bonus)",
+    "Gamepasses / VIP / 2x": r"gamepass|game pass|\bvip\b|\b2x\b|\bx2\b|double",
+    "Frequent updates": r"\bupdate|new (map|world|area|island)",
+}
+FEATURE_RX = {k: re.compile(v, re.I) for k, v in FEATURES.items()}
+
+
+def singular(w):
+    w = w.strip()
+    if len(w) > 4 and w.endswith("s") and not w.endswith("ss"):
+        w = w[:-1]
+    return w.title()
+
+
+def make_title(base_label, noun):
+    pat = TITLES.get(base_label, "{X} " + base_label.split(" /")[0])
+    t = pat.replace("{X}", noun)
+    return re.sub(r"\ba ([AEIOU])", r"an \1", t)
+
+
+def make_ideas(recs, groups, big):
+    if not recs:
+        return []
+    by_key = {(g["kind"], g["label"]): g for g in groups}
+    bases = [r for r in recs if r["kind"] == "niche"]
+    twists = []
+    for r in recs:
+        if r["count"] < 3:
+            continue
+        if r["kind"] == "niche" and r["label"] in NICHE_NOUN:
+            twists.append((r, NICHE_NOUN[r["label"]]))
+        elif r["kind"] == "name":
+            phrase = r["label"].strip('"')
+            words = phrase.split()
+            if len(words) == 1 and phrase not in GENERIC and phrase not in STOPWORDS:
+                twists.append((r, singular(phrase)))
+    cands = []
+    for b in bases[:8]:
+        bg = by_key[("niche", b["label"])]
+        bset = set(bg["ids"])
+        for t, noun in twists:
+            if t["label"] == b["label"]:
+                continue
+            tset = set(t["ids"])
+            overlap = len(bset & tset)
+            if overlap > 1 or noun.lower() in b["label"].lower():
+                continue
+            score = (0.6 * b["score"] + 0.4 * t["score"] + (5 if (t.get("ch7") or 0) > 0 else 0)
+                     + min(5, t["ccu"] / 100000) - 4 * overlap)
+            cands.append((score, b, bg, t, noun, overlap))
+    cands.sort(key=lambda c: -c[0])
+    ideas, used, used_t = [], set(), set()
+    for score, b, bg, t, noun, overlap in cands:
+        if b["label"] in used or noun in used_t or len(ideas) >= 3:
+            continue
+        used.add(b["label"])
+        used_t.add(noun)
+        title = make_title(b["label"], noun)
+        # features from the most successful games in both groups
+        study_ids = bg["ids"][:6] + [i for i in t["ids"][:3] if i not in bg["ids"][:6]]
+        wt = sum(big[int(i)]["ccu"] for i in study_ids) or 1
+        feats = []
+        for f, rx in FEATURE_RX.items():
+            share = sum(big[int(i)]["ccu"] for i in study_ids
+                        if rx.search(big[int(i)].get("desc", "") + " " + big[int(i)]["name"])) / wt
+            if share >= 0.3:
+                feats.append({"name": f, "pct": round(share * 100)})
+        feats.sort(key=lambda f: -f["pct"])
+        ccus = sorted(big[int(i)]["ccu"] for i in bg["ids"])
+        median = ccus[len(ccus) // 2] if ccus else 0
+        new_ccus = sorted(big[int(i)]["ccu"] for i in bg["ids"] if is_new(big[int(i)]))
+        why = [f"{b['label']} scores {b['score']}/100 on the What to Build tab" +
+               (f": {b['why'][0][0].lower() + b['why'][0][1:]}" if b["why"] else "")]
+        why += b["why"][1:3]
+        if t.get("ch7") is not None:
+            why.append(f"{noun} games are {'up' if t['ch7'] >= 0 else 'down'} {abs(t['ch7']):.0f}% recently "
+                       f"({t['count']} games, {t['ccu']:,} players)")
+        else:
+            why.append(f"{noun} is a popular theme right now ({t['count']} games, {t['ccu']:,} players)")
+        why.append("No game with 5,000+ players combines these two yet, so there's an open spot" if overlap == 0
+                   else "Only one game with 5,000+ players combines these two so far, so there's still room")
+        warn = list(b["warn"][:2])
+        target = (f"New {b['label']} games (made in the last {NEW_GAME_DAYS} days) are reaching about "
+                  f"{new_ccus[len(new_ccus) // 2]:,} players. A typical 5k+ game here has about {median:,}."
+                  if new_ccus else f"A typical 5k+ game in this niche has about {median:,} players.")
+        ideas.append({
+            "title": title,
+            "pitch": f"A {b['label'].split(' /')[0].lower().replace('___', 'something')} game with {'an' if noun[0] in 'AEIOU' else 'a'} {noun.lower()} theme. "
+                     f"It takes what's working in one of the strongest niches and adds a theme that's pulling players right now.",
+            "loop": LOOPS.get(b["label"], ""),
+            "twist": f"Make everything {noun.lower()}-themed: the items, characters, map and names. "
+                     f"Use what players like in {noun.lower()} games as the stuff they collect, earn or fight with.",
+            "why": why, "warn": warn, "features": feats[:8], "target": target,
+            "base": b["label"], "theme": noun, "score": round(score),
+            "study": study_ids[:3] + [i for i in t["ids"][:2] if i not in study_ids[:3]],
+        })
+    return ideas
+
+
 def creator_url(g):
     cid = g.get("creatorId")
     if not cid:
@@ -609,9 +780,9 @@ def is_new(g):
 # The report page
 # ---------------------------------------------------------------------------
 def write_report(state):
-    groups, gdata, recs, span7 = build_groups(state)
+    groups, gdata, recs, span7, ideas = build_groups(state)
     payload = {
-        "recs": recs, "span7": span7,
+        "recs": recs, "span7": span7, "ideas": ideas,
         "groups": groups, "games": gdata, "minCcu": MIN_CCU,
         "updated": state.get("last_update"), "scanned": state.get("last_scan"),
         "updateHours": UPDATE_HOURS, "newDays": NEW_GAME_DAYS,
@@ -723,6 +894,23 @@ tr.more td{background:#0f121a;padding:0}
 .why li{padding:3px 0}
 .btn{margin-top:12px;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer;font:inherit;font-size:13px}
 .study{font-size:12.5px;color:var(--dim);margin-top:10px}.study a{color:var(--text)}
+.idea{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:16px}
+.idea.top{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.idea h3{margin:4px 0 6px;font-size:26px;letter-spacing:-.4px}
+.idea .tag{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--gold)}
+.idea .pitch{color:#c3c8d4;font-size:14px;margin:0 0 14px}
+.igrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.igrid{grid-template-columns:1fr}}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.box h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim)}
+.box p{margin:0 0 8px;font-size:13.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#1d2230;border:1px solid var(--line);border-radius:20px;padding:4px 10px;font-size:12.5px}
+.chip b{color:var(--accent)}
+.studies{display:flex;flex-direction:column;gap:8px}
+.study-g{display:flex;align-items:center;gap:10px;font-size:13px}
+.study-g img{width:40px;height:40px;border-radius:8px;background:#222}
+.study-g a{color:var(--text);font-weight:600;text-decoration:none}.study-g a:hover{color:var(--accent)}
 .intro{color:var(--dim);font-size:13px;margin:0 0 16px;max-width:900px}
 .chev{color:var(--dim);font-size:11px;margin-left:6px}
 </style></head><body>
@@ -732,7 +920,8 @@ tr.more td{background:#0f121a;padding:0}
 </header>
 <div class="bar">
   <div class="tabs">
-    <button class="tab on" data-t="recs">⭐ What to Build</button>
+    <button class="tab on" data-t="ideas">💡 Game Ideas</button>
+    <button class="tab" data-t="recs">⭐ What to Build</button>
     <button class="tab" data-t="niche">Niches</button>
     <button class="tab" data-t="name">Popular Names</button>
     <button class="tab" data-t="all">All Games</button>
@@ -784,6 +973,7 @@ function renderList(){
   const L=document.getElementById('list');
   if(tab=='all'){L.innerHTML='';L.style.display='none';renderAll(q);return}
   if(tab=='recs'){L.innerHTML='';L.style.display='none';renderRecs(q);return}
+  if(tab=='ideas'){L.innerHTML='';L.style.display='none';renderIdeas();return}
   L.style.display='';
   let gs=D.groups.filter(g=>g.kind==tab);
   if(q)gs=gs.filter(g=>g.label.toLowerCase().includes(q)||g.ids.some(i=>D.games[i].name.toLowerCase().includes(q)));
@@ -854,9 +1044,28 @@ function renderAll(q){
 
 function setTab(t,keepSel){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t==t));
-  tab=t;if(!keepSel)sel=null;document.querySelector('main').style.gridTemplateColumns=(t=='all'||t=='recs')?'1fr':'';
-  document.getElementById('sort').style.display=t=='recs'?'none':'';renderList()}
+  tab=t;if(!keepSel)sel=null;document.querySelector('main').style.gridTemplateColumns=(t=='all'||t=='recs'||t=='ideas')?'1fr':'';
+  document.getElementById('sort').style.display=(t=='recs'||t=='ideas')?'none':'';
+  document.getElementById('q').style.display=t=='ideas'?'none':'';renderList()}
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+
+function renderIdeas(){
+  const el=document.getElementById('detail');
+  const ideas=D.ideas||[];
+  el.innerHTML=`<div class="dh"><div><div class="kind">Game ideas</div><h2>What you should build next</h2></div></div>
+  <p class="intro">Each idea takes one of the strongest niches from the data and gives it a theme that's pulling players right now but that no big game has combined with that niche yet. The features list comes from reading the descriptions of the most successful games in both. These are starting points: make the game your own, and don't copy anyone's game.</p>
+  ${ideas.map((d,i)=>`<div class="idea ${i==0?'top':''}">
+    <div class="tag">${i==0?'⭐ Top idea':'Idea '+(i+1)} · ${esc(d.base)} + ${esc(d.theme)} theme</div>
+    <h3>${esc(d.title)}</h3><p class="pitch">${esc(d.pitch)}</p>
+    <div class="igrid">
+      <div class="box"><h4>Why this game</h4><ul class="why" style="margin:0">${d.why.map(w=>`<li>✅ ${esc(w)}</li>`).join('')}${d.warn.map(w=>`<li>⚠️ ${esc(w)}</li>`).join('')}</ul></div>
+      <div class="box"><h4>How it plays</h4><p><b>Core loop:</b> ${esc(d.loop)}</p><p><b>Your twist:</b> ${esc(d.twist)}</p><p><b>What to expect:</b> ${esc(d.target)}</p></div>
+      <div class="box"><h4>Must-have features <span style="text-transform:none;letter-spacing:0">(% of top games' players that have it)</span></h4>
+        <div class="chips">${d.features.map(f=>`<span class="chip">${esc(f.name)} <b>${f.pct}%</b></span>`).join('')||'<span class="flatc">Not enough description data yet.</span>'}</div></div>
+      <div class="box"><h4>Study these games</h4><div class="studies">${d.study.filter(id=>D.games[id]).map(id=>{const g=D.games[id];
+        return `<div class="study-g">${g.icon?`<img src="${g.icon}">`:'<img>'}<div><a href="${g.url}" target="_blank">${esc(g.name)}</a><div class="flatc">${fmt(g.ccu)} CCU${g.isNew?' · new':''}</div></div></div>`}).join('')}</div></div>
+    </div></div>`).join('')||'<div class="empty">Not enough data yet. Check back after the next update.</div>'}`;
+}
 
 function renderRecs(q){
   const el=document.getElementById('detail');
@@ -881,7 +1090,7 @@ function renderRecs(q){
 }
 document.getElementById('q').oninput=()=>{sel=null;renderList()};
 document.getElementById('sort').onchange=renderList;
-setTab('recs');
+setTab('ideas');
 </script></body></html>"""
 
 
